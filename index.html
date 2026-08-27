@@ -238,7 +238,7 @@
 
 // ---- BGM: 실제 유튜브 공식 음원 영상 ID (YouTube IFrame API로 재생) ----
 const SONGS = [
-  { title: "Steve Lacy - oh yeah?", videoId: "2zPGWGqdfJ8" },
+  { title: "Steve Lacy - oh yeah?", videoId: "hTZNO0ap6gs" },
   { title: "Tame Impala - Loser",   videoId: "qmIo0F2uOGU" }
 ];
 
@@ -754,6 +754,17 @@ function checkCollisions(){
     let hit = false;
     if(o.type === "drone"){
       hit = circleRectHit(Player.x,Player.y,Player.radius, o.x-o.w/2,o.y-o.h/2,o.w,o.h);
+      if(hit){
+        // 드론 위에서 아래로 밟으면(스톰프) 데미지 없이 드론을 없애고 위로 튕겨오른다
+        const stomping = Player.vy > 40 && Player.y < o.y - 2;
+        if(stomping){
+          o.dead = true;
+          if(Player.mode !== "swing") Player.vy = -420;
+          Journey.senseGauge = Math.min(100, Journey.senseGauge + 8);
+          particles.push({type:"stomp", x1:o.x, y1:o.y, t:0, life:0.35});
+          continue;
+        }
+      }
     }
     if(hit){ hitPenalty(); o.dead = true; break; }
   }
@@ -1226,6 +1237,15 @@ function drawParticles(){
       ctx.beginPath(); ctx.arc(sx, sy, 6+p.t*60, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = `rgba(255,230,120,${a})`;
       ctx.beginPath(); ctx.arc(sx, sy, 3+p.t*30, 0, Math.PI*2); ctx.fill();
+    } else if(p.type === "stomp"){
+      const life = p.life||0.35;
+      const a = Math.max(0, 1-p.t/life);
+      const sx = p.x1-Game.camX, sy = p.y1-Game.camY-8-p.t*40;
+      ctx.font = "16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.globalAlpha = a;
+      ctx.fillText("💥", sx, sy);
+      ctx.globalAlpha = 1;
     }
   }
 }
@@ -2002,7 +2022,6 @@ async function approveKakaoPay(pgToken, tid){
 document.getElementById("kakaoPayBtn").addEventListener("click", async ()=>{
   const btn = document.getElementById("kakaoPayBtn");
   btn.disabled = true;
-  setPayStatus("카카오페이 결제 준비 중...");
   // 결제는 실제 카카오톡 앱으로 리다이렉트되며 페이지가 새로고침되어 메모리 상태가 사라진다.
   // 그 전에 홈에서 바꾼 테마/스킨/난이도를 저장해두고, 결제 성공 후 복귀 시 그대로 복원한다.
   localStorage.setItem(STORAGE_KEY_PENDING_SETTINGS, JSON.stringify({
@@ -2012,14 +2031,13 @@ document.getElementById("kakaoPayBtn").addEventListener("click", async ()=>{
     const ready = await requestKakaoPayReady();
     if(ready.tid) sessionStorage.setItem("kakaoPayTid", ready.tid);
     if(ready.next_redirect_mobile_url){
-      setPayStatus("카카오톡 결제창으로 이동합니다...");
       location.href = ready.next_redirect_mobile_url; // 실제 카카오톡 결제 화면으로 리다이렉트
     } else {
-      setPayStatus("결제 준비 응답에 next_redirect_mobile_url이 없습니다.");
+      setPayStatus("부활에 실패했습니다. 다시 시도해주세요.");
       btn.disabled = false;
     }
   } catch(err){
-    setPayStatus("결제 준비 실패: " + err.message);
+    setPayStatus("부활에 실패했습니다. 다시 시도해주세요.");
     btn.disabled = false;
   }
 });
@@ -2034,17 +2052,13 @@ document.getElementById("kakaoPayBtn").addEventListener("click", async ()=>{
   if(result === "success"){
     const tid = params.get("tid") || sessionStorage.getItem("kakaoPayTid");
     const pgToken = params.get("pg_token") || "demo_pg_token";
-    setPayStatus("결제 승인 처리 중...");
     approveKakaoPay(pgToken, tid).then(()=>{
-      setPayStatus("결제 완료! 목숨을 채우고 즉시 부활합니다 🎉");
-      setTimeout(reviveInstantly, 600);
-    }).catch(err=>{
-      setPayStatus("결제 승인 실패: " + err.message);
+      reviveInstantly();
+    }).catch(()=>{
+      setPayStatus("부활에 실패했습니다. 다시 시도해주세요.");
     });
-  } else if(result === "cancel"){
-    setPayStatus("결제가 취소되었습니다.");
-  } else {
-    setPayStatus("결제에 실패했습니다.");
+  } else if(result !== "cancel"){
+    setPayStatus("부활에 실패했습니다. 다시 시도해주세요.");
   }
 })();
 
