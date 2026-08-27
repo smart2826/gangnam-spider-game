@@ -86,7 +86,7 @@
   .choice-btn.selected{ border-color:#ff2e63; background:#3a1030; color:#fff; box-shadow:0 0 14px rgba(255,46,99,.5); }
   .skin-swatch{ width:20px; height:20px; border-radius:50%; margin:0 auto 4px; border:2px solid rgba(255,255,255,.4); }
 
-  #startBtn, #reviveBtn, #restartBtn, #endingRestartBtn{
+  #startBtn, #reviveBtn, #restartBtn, #endingRestartBtn, #guideCloseBtn{
     margin-top:20px; background:linear-gradient(180deg,#ff4757,#c81c40); color:#fff; border:none;
     border-radius:30px; padding:14px 34px; font-size:16px; font-weight:bold; box-shadow:0 6px 18px rgba(255,40,70,.4);
   }
@@ -102,6 +102,11 @@
   .kakao-pay-btn:active{ transform:scale(.97); }
   .timer-big{ font-size:40px; font-weight:900; letter-spacing:2px; margin:10px 0 4px; font-variant-numeric:tabular-nums; }
   .small-note{ font-size:11px; color:#888; max-width:280px; margin-top:14px; line-height:1.5; }
+  .donate-note{ font-size:11px; color:#ffd76b; max-width:280px; margin-top:14px; line-height:1.6;
+    border:1px solid rgba(255,215,107,.35); border-radius:10px; padding:10px 12px; }
+  .guide-list{ max-width:300px; text-align:left; margin-top:14px; }
+  .guide-list p{ font-size:12.5px; color:#dfe1f5; line-height:1.6; margin:0 0 10px; }
+  .guide-list b{ color:#fff; }
   .pay-status{ font-size:12px; margin-top:8px; min-height:16px; color:#ffd76b; }
 
   #controlHint{ position:absolute; bottom:14px; left:0; right:0; text-align:center; color:rgba(255,255,255,.55);
@@ -165,10 +170,22 @@
       </div>
 
       <button id="startBtn">🕸️ 게임 시작 (음악 재생)</button>
-      <div class="small-note">
-        위쪽 상태바에서 악당이 나타나는 지점을 미리 확인하세요.<br>
-        📷 액자를 모으면 조력자가 나타나고, 🕷️ 스파이더 센스가 가득 차면 5초간 무적이 됩니다.
+      <button id="guideBtn" class="ghost-btn">❓ 게임 설명</button>
+      <div class="donate-note">💛 친절한 이웃 스파이더맨의 토큰 값을 지원해주세요!<br>계좌번호: 기업은행 63504448801011</div>
+    </div>
+
+    <!-- ============ GAME GUIDE (게임 설명) ============ -->
+    <div id="guideScreen" class="overlay hidden">
+      <div class="title-logo" style="font-size:20px;">게임 설명</div>
+      <div class="guide-list">
+        <p>🕸️ <b>조작</b> — 화면(또는 스페이스바)을 누른 방향으로 거미줄 발사, 손을 떼면 놓습니다.</p>
+        <p>❤️ <b>하트</b> — 드론에 닿거나 악당 공격에 맞으면 감소. 거미줄이 걸리지 않은 채 화면 밖으로 나가도 감소합니다. 0개가 되면 게임 오버.</p>
+        <p>📷 <b>액자</b> — 빌딩에 붙은 액자를 3개 모으면 조력자(메이 숙모 / 퍼니셔)가 등장합니다.</p>
+        <p>🕷️ <b>스파이더 센스</b> — 게이지가 가득 차면 5초간 무적 상태가 됩니다.</p>
+        <p>⚠️ <b>악당</b> — 1000m마다 한 번씩 등장하며, 상단 바에서 다음 악당을 미리 확인할 수 있습니다.</p>
+        <p>🏁 <b>목표</b> — 최종 목적지까지 도달해 MJ와 네드를 만나보세요!</p>
       </div>
+      <button id="guideCloseBtn">확인</button>
     </div>
 
     <!-- ============ GAME OVER / WAIT SCREEN ============ -->
@@ -183,15 +200,11 @@
       <button id="homeBtn" class="ghost-btn">🏠 홈으로</button>
 
       <button id="kakaoPayBtn" class="kakao-pay-btn">
-        <span style="font-size:16px;">💛</span> 100원 결제하고 대기 없이 즉시 부활하기
+        <span style="font-size:16px;">💛</span> 부활하기
       </button>
       <div class="pay-status" id="payStatus"></div>
 
-      <div class="small-note">
-        카카오페이 Sandbox(TC0ONETIME) 테스트 결제입니다. 실제 결제 연동을 위해서는
-        소스코드 내 KAKAO_CONFIG 주석을 참고하여 실제 가맹점 CID / Admin Key로 교체하고,
-        Admin Key는 반드시 서버(백엔드)에서만 사용하도록 프록시 서버를 구성해야 합니다.
-      </div>
+      <div class="donate-note">💛 친절한 이웃 스파이더맨의 토큰 값을 지원해주세요!<br>계좌번호: 기업은행 63504448801011</div>
     </div>
 
     <!-- ============ ENDING SCREEN ============ -->
@@ -305,12 +318,13 @@ const DIFFICULTY = {
 // ---------------------------------------------------------------------------
 // 악당 (스킬 이펙트는 각자 특성에 맞게 다르게 구현됨 - 아래 spawnVillainAttack 참고)
 // ---------------------------------------------------------------------------
+// skin=몸통 주색상, hair=머리/투구 색, suit=옷/장갑 포인트, accent=디테일 포인트
 const VILLAINS = {
-  jeanGrey:  { name:"진 그레이",  color:"#e0214a", accent:"#ffd76b", attackName:"염동력 파동" },
-  theHand:   { name:"더 핸드",    color:"#151515", accent:"#c81c40", attackName:"수리검 난사" },
-  scorpion:  { name:"스콜피온",   color:"#3a7d2c", accent:"#1f4a18", attackName:"꼬리 강타" },
-  tombstone: { name:"툼스톤",     color:"#eef0f0", accent:"#2a2a2a", attackName:"돌진" },
-  hulk:      { name:"헐크",       color:"#4caf50", accent:"#1b3d17", attackName:"대지 강타" }
+  jeanGrey:  { name:"진 그레이",  skin:"#0d5c3a", hair:"#ff6a1a", suit:"#0a4028", accent:"#ffcf3f", attackName:"염동력 충격파" },
+  theHand:   { name:"더 핸드",    skin:"#c81c2e", hair:"#151515", suit:"#8f1220", accent:"#1a1a1a", attackName:"표창 난사" },
+  scorpion:  { name:"스콜피온",   skin:"#2f6b2f", hair:"#1a2a1a", suit:"#1c4a1c", accent:"#0d1a0d", attackName:"꼬리 강타" },
+  tombstone: { name:"툼스톤",     skin:"#e8e0d0", hair:"#e8e0d0", suit:"#151b2e", accent:"#c81c2e", attackName:"주먹 던지기" },
+  hulk:      { name:"헐크",       skin:"#4caf50", hair:"#2e7d32", suit:"#6a3fa0", accent:"#4a2a70", attackName:"박수 충격파" }
 };
 const VILLAIN_KEYS = Object.keys(VILLAINS);
 const VILLAIN_ICON = { jeanGrey:"💫", theHand:"🥷", scorpion:"🦂", tombstone:"🪦", hulk:"👊" };
@@ -354,6 +368,21 @@ const BUILDING_VISUAL_DEPTH = 600;
 // 악당은 1000m(=12000 월드유닛)마다 한 번씩 등장한다
 const VILLAIN_INTERVAL = 12000;
 
+// 스파이더맨 혼잣말: 500m(=6000 월드유닛)마다 한 번씩, 5초간 화면에 표시
+const MONOLOGUE_INTERVAL = 6000;
+const MONOLOGUE_LINES = [
+  "내가 구하러 갈게, MJ!",
+  "네드, 조금만 기다려!",
+  "토니... 저도 이제 혼자 할 수 있어요.",
+  "하루 종일이라도 할 수 있어!",
+  "배너 박사님은 대체 어디로 가신 거지?",
+  "메이 숙모가 걱정하고 계시겠다...",
+  "이 도시는 내가 지킨다.",
+  "조금만 더 힘내자, 피터.",
+  "위대한 힘에는... 위대한 책임이 따르지."
+];
+const SENSE_WARNING_TEXT = "잠깐, 내 몸이 이상해!";
+
 // 여정(최종 목적지까지의 진행 상태) - 악당 체크포인트 / 조력자 게이지 / 스파이더 센스
 const Journey = {
   destinationX: 3200,
@@ -362,10 +391,13 @@ const Journey = {
   nextVillainType: "jeanGrey",
   activeVillainCP: null,   // {type,phase,phaseT,heartsAtStart,screenX,screenY}
   allyGauge: 0,
+  photosSinceAlly: 0,      // 액자 3개당 조력자 등장
   activeAlly: null,        // {type:'may'|'punisher', t, duration, fireTimer}
   senseGauge: 0,
+  senseWarned: false,      // 무적 발동 직전 "몸이 이상해!" 대사를 한 번만 띄우기 위한 플래그
   invincibleUntil: -1,
-  photosCollected: 0
+  photosCollected: 0,
+  nextMonologueX: MONOLOGUE_INTERVAL // 500m마다 한 번씩 혼잣말
 };
 
 const Player = {
@@ -379,14 +411,16 @@ const Player = {
   omega: 0,             // angular velocity
   facing: 1,
   webHeld: false,
-  legPhase: 0
+  legPhase: 0,
+  speechText: null,     // 현재 화면에 떠 있는 대사
+  speechTimer: 0        // 대사가 사라지기까지 남은 시간(초)
 };
 
 let buildings = [];     // {x,w,h,type,windowSeed,hasPhoto,photoTaken,photoY}
 let obstacles = [];     // {type,x,y,w,h,vx,vy,phase,dead}
 let hazards = [];       // villain attack hitboxes {type,x,y,...,dead}
 let particles = [];     // simple web / impact / pickup particles
-let landmarks = [];     // background decorations (hand statue, big signs, crane)
+let landmarks = [];     // background decorations (hand statue, big signs)
 let stars = [];
 let buildingsUntilPhoto = 7; // 액자는 빌딩 7~8개당 1개꼴로 등장
 
@@ -491,19 +525,6 @@ function spawnDronesIfNeeded(){
     spawnDronesIfNeeded._nextX += rand(density*0.7, density*1.3) * (1/Game.speedMul);
   }
   obstacles = obstacles.filter(o => !o.dead && o.x > Game.camX - 300);
-}
-
-// 크레인은 충돌 없는 순수 배경 장식이므로 난이도와 무관하게 일정한 간격으로만 등장한다
-function spawnCraneIfNeeded(){
-  const aheadX = Game.camX + VW + 150;
-  if(!spawnCraneIfNeeded._nextX) spawnCraneIfNeeded._nextX = aheadX;
-  if(spawnCraneIfNeeded._nextX < aheadX + 400){
-    obstacles.push({
-      type:"crane", x:spawnCraneIfNeeded._nextX, y:WORLD_BASE_Y-190, w:26, h:190, armLen:110,
-      phase: Math.random()*Math.PI*2, dead:false
-    });
-    spawnCraneIfNeeded._nextX += rand(650, 1000);
-  }
 }
 
 /* =========================================================================
@@ -629,6 +650,7 @@ function update(dt){
   Game.speedMul = 1 + Math.min(1.6, Game.elapsed/60);
   if(Game.invulnT > 0) Game.invulnT -= dt;
   updateSpiderSense(dt);
+  updateMonologue(dt);
 
   if(Player.mode === "swing" && Player.anchor){
     const L = Player.ropeLen;
@@ -673,7 +695,6 @@ function update(dt){
   genBuildingsUpTo(Game.camX + VW + 300);
   genLandmarksUpTo(Game.camX + VW + 300);
   spawnDronesIfNeeded();
-  spawnCraneIfNeeded();
   updateObstacles(dt);
   updateParticles(dt);
   checkCollisions();
@@ -688,12 +709,17 @@ function update(dt){
 }
 
 function updateObstacles(dt){
+  const punisherActive = Journey.activeAlly && Journey.activeAlly.type==="punisher";
   for(const o of obstacles){
     if(o.type === "drone"){
+      if(punisherActive){
+        // 퍼니셔가 나와 있는 동안에는 새로 나타나는 드론도 곧바로 폭파된다
+        o.dead = true;
+        particles.push({type:"explosion", x1:o.x, y1:o.y, t:0, life:0.4});
+        continue;
+      }
       o.phase += dt*2;
       o.y += Math.sin(o.phase)*0.6;
-    } else if(o.type === "crane"){
-      o.phase += dt*0.8;
     }
   }
 }
@@ -725,7 +751,6 @@ function checkCollisions(){
   for(const o of obstacles){
     if(o.dead) continue;
     if(o.x < Game.camX - 300){ survived++; continue; } // passed safely, about to be culled
-    // 크레인(가로등처럼 보이는 구조물)은 더 이상 충돌 판정이 없는 순수 배경 장식이다
     let hit = false;
     if(o.type === "drone"){
       hit = circleRectHit(Player.x,Player.y,Player.radius, o.x-o.w/2,o.y-o.h/2,o.w,o.h);
@@ -743,7 +768,8 @@ function checkPickups(){
     if(Math.hypot(dx,dy) < Player.radius+14){
       b.photoTaken = true;
       Journey.photosCollected++;
-      Journey.allyGauge = Math.min(100, Journey.allyGauge+34);
+      Journey.photosSinceAlly++;
+      Journey.allyGauge = Math.min(100, Journey.photosSinceAlly/3*100);
       tryTriggerAlly();
       particles.push({type:"pickup", x1:wx,y1:wy,t:0, life:0.5});
     }
@@ -780,12 +806,29 @@ function hitPenalty(){
    5b. SPIDER-SENSE GAUGE
    ========================================================================= */
 
+function sayLine(text, duration){
+  Player.speechText = text;
+  Player.speechTimer = duration;
+}
+
 function updateSpiderSense(dt){
-  if(Game.elapsed < Journey.invincibleUntil) return; // currently invincible, gauge stays at 0
+  if(Game.elapsed < Journey.invincibleUntil){ Journey.senseWarned = false; return; } // 무적 중엔 게이지 0으로 유지
   Journey.senseGauge = Math.min(100, Journey.senseGauge + dt*4.5);
+  if(!Journey.senseWarned && Journey.senseGauge >= 95){
+    Journey.senseWarned = true;
+    sayLine(SENSE_WARNING_TEXT, 1.2); // 무적 발동 약 1초 전 경고 대사
+  }
   if(Journey.senseGauge >= 100){
     Journey.invincibleUntil = Game.elapsed + 5;
     Journey.senseGauge = 0;
+  }
+}
+
+function updateMonologue(dt){
+  if(Player.speechTimer > 0) Player.speechTimer -= dt;
+  if(Player.x >= Journey.nextMonologueX){
+    sayLine(pick(MONOLOGUE_LINES), 5);
+    Journey.nextMonologueX += MONOLOGUE_INTERVAL;
   }
 }
 
@@ -801,10 +844,15 @@ function generateJourney(){
   Journey.nextVillainType = pick(VILLAIN_KEYS);
   Journey.activeVillainCP = null;
   Journey.allyGauge = 0;
+  Journey.photosSinceAlly = 0;
   Journey.activeAlly = null;
   Journey.senseGauge = 0;
+  Journey.senseWarned = false;
   Journey.invincibleUntil = -1;
   Journey.photosCollected = 0;
+  Journey.nextMonologueX = MONOLOGUE_INTERVAL;
+  Player.speechText = null;
+  Player.speechTimer = 0;
 }
 
 function maybeTriggerVillain(){
@@ -839,27 +887,30 @@ function spawnVillainAttack(cp){
   const wx = Game.camX + cp.screenX, wy = cp.screenY + Game.camY;
   switch(cp.type){
     case "jeanGrey": {
-      for(let i=0;i<3;i++){
-        hazards.push({ type:"orb", x:wx, y:wy, tx:Player.x, ty:Player.y, t:0, delay:i*0.28, r:10, speed:230, life:2.4, dead:false });
-      }
+      // 염동력 충격파: 그녀 위치에서 사방으로 퍼지는 링 형태 충격파
+      hazards.push({ type:"shockwave", x:wx, y:wy, t:0, life:1.0, maxR:240, r:1, color:"#ff6fd8", dead:false });
       break;
     }
     case "theHand": {
+      // 표창 난사
       [-0.5,-0.25,0,0.25,0.5].forEach(a=>{
         hazards.push({ type:"shuriken", x:wx, y:wy, vx:-280*Math.cos(a), vy:280*Math.sin(a)+(Player.y-wy)*0.35, t:0, r:8, life:1.6, spin:0, dead:false });
       });
       break;
     }
     case "scorpion": {
+      // 전갈 꼬리 휘두르기
       hazards.push({ type:"tailwhip", x:wx, y:wy, t:0, life:0.9, reach:230, angle:-0.5, curLen:0, dead:false });
       break;
     }
     case "tombstone": {
-      hazards.push({ type:"charge", x:wx+50, y:Player.y, vx:-430, w:70, h:70, t:0, life:2.0, dead:false });
+      // 큰 주먹 던지기: 플레이어가 있던 지점을 향해 직선으로 날아가는 거대한 주먹
+      hazards.push({ type:"fist", x:wx, y:wy, tx:Player.x, ty:Player.y, t:0, life:1.8, r:22, speed:260, dead:false });
       break;
     }
     case "hulk": {
-      hazards.push({ type:"shockwave", x:wx, y:wy, groundY:wy, t:0, life:1.0, maxR:260, r:1, dead:false });
+      // 박수치며 충격파 날리기: 그의 위치에서 사방으로 퍼지는 링 형태 충격파
+      hazards.push({ type:"shockwave", x:wx, y:wy, t:0, life:1.0, maxR:260, r:1, color:"#8fe06a", dead:false });
       break;
     }
   }
@@ -868,22 +919,18 @@ function spawnVillainAttack(cp){
 function updateHazards(dt){
   for(const h of hazards){
     h.t += dt;
-    if(h.type==="orb"){
-      if(h.t >= h.delay){
-        if(h.vx===undefined){
-          const dx=h.tx-h.x, dy=h.ty-h.y, d=Math.hypot(dx,dy)||1;
-          h.vx = dx/d*h.speed; h.vy = dy/d*h.speed;
-        }
-        h.x += h.vx*dt; h.y += h.vy*dt;
+    if(h.type==="fist"){
+      if(h.vx===undefined){
+        const dx=h.tx-h.x, dy=h.ty-h.y, d=Math.hypot(dx,dy)||1;
+        h.vx = dx/d*h.speed; h.vy = dy/d*h.speed;
       }
+      h.x += h.vx*dt; h.y += h.vy*dt;
     } else if(h.type==="shuriken"){
       h.x += h.vx*dt; h.y += h.vy*dt; h.spin = (h.spin||0) + dt*22;
     } else if(h.type==="tailwhip"){
       const p = Math.min(1, h.t/h.life);
       h.curLen = h.reach * Math.sin(Math.min(1,p*1.6)*Math.PI);
       h.angle = -0.5 + p*1.0 + (Player.y-h.y)*0.0012;
-    } else if(h.type==="charge"){
-      h.x += h.vx*dt;
     } else if(h.type==="shockwave"){
       h.r = (h.t/h.life)*h.maxR;
     }
@@ -902,17 +949,16 @@ function checkHazardCollisions(){
   for(const h of hazards){
     if(h.dead) continue;
     let hit=false;
-    if(h.type==="orb" || h.type==="shuriken"){
-      if(h.type==="orb" && h.t < h.delay) continue;
+    if(h.type==="fist" || h.type==="shuriken"){
       hit = Math.hypot(Player.x-h.x, Player.y-h.y) < (Player.radius + h.r);
     } else if(h.type==="tailwhip"){
       const len = h.curLen||0;
       const ex = h.x + Math.cos(h.angle)*len, ey = h.y + Math.sin(h.angle)*len;
       hit = pointSegDist(Player.x,Player.y, h.x,h.y, ex,ey) < Player.radius+8;
-    } else if(h.type==="charge"){
-      hit = circleRectHit(Player.x,Player.y,Player.radius, h.x-h.w/2, h.y-h.h/2, h.w, h.h);
     } else if(h.type==="shockwave"){
-      hit = Math.abs(Player.x-h.x) < 200 && Player.y > h.groundY-(h.r||0);
+      // 사방으로 퍼지는 링 형태 충격파 - 링이 정확히 지나가는 순간에만 맞는다(피할 수 있게)
+      const dist = Math.hypot(Player.x-h.x, Player.y-h.y);
+      hit = Math.abs(dist - h.r) < 26;
     }
     if(hit){ hitPenalty(); h.dead = true; }
   }
@@ -923,7 +969,8 @@ function checkHazardCollisions(){
    ========================================================================= */
 
 function tryTriggerAlly(){
-  if(Journey.allyGauge < 100 || Journey.activeAlly) return;
+  if(Journey.photosSinceAlly < 3 || Journey.activeAlly) return;
+  Journey.photosSinceAlly = 0;
   Journey.allyGauge = 0;
   const type = Math.random() < 0.5 ? "may" : "punisher";
   if(type==="may"){
@@ -931,6 +978,17 @@ function tryTriggerAlly(){
     Game.hearts = Math.min(Game.maxHearts, Game.hearts+1);
   } else {
     Journey.activeAlly = { type:"punisher", t:0, duration:8.0, fireTimer:0 };
+    explodeAllDrones(); // 퍼니셔 등장 - 화면에 있는 드론들을 모두 폭파시킨다
+  }
+}
+
+// 퍼니셔가 나오는 동안에는 드론이 존재할 수 없다 (등장 즉시, 그리고 이후 생성되는 것도 즉시 폭파)
+function explodeAllDrones(){
+  for(const o of obstacles){
+    if(o.type === "drone" && !o.dead){
+      o.dead = true;
+      particles.push({type:"explosion", x1:o.x, y1:o.y, t:0, life:0.4});
+    }
   }
 }
 
@@ -1121,6 +1179,7 @@ function drawBillboard(x,y,text){
 
 function drawObstacles(){
   for(const o of obstacles){
+    if(o.dead) continue;
     const sx = o.x - Game.camX;
     const sy = o.y - Game.camY;
     if(sx < -200 || sx > VW+200 || sy < -300 || sy > VH+300) continue;
@@ -1136,19 +1195,6 @@ function drawObstacles(){
         ctx.lineTo(sx+sgn*(o.w/2+10), sy-10);
         ctx.stroke();
       });
-    } else if(o.type === "crane"){
-      ctx.fillStyle = "#e0a530";
-      ctx.fillRect(sx-4, sy-o.h, 8, o.h);
-      const armX = Math.cos(o.phase)*o.armLen;
-      const armY = Math.sin(o.phase*0.6)*10;
-      ctx.strokeStyle = "#e0a530";
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy-o.h);
-      ctx.lineTo(sx+armX, sy-o.h+armY);
-      ctx.stroke();
-      ctx.fillStyle = "#444";
-      ctx.fillRect(sx+armX-6, sy-o.h+armY, 12, 12);
     }
   }
 }
@@ -1172,6 +1218,14 @@ function drawParticles(){
       const a = 1-p.t/(p.life||0.2);
       ctx.fillStyle = `rgba(255,220,120,${Math.max(0,a)})`;
       ctx.beginPath(); ctx.arc(p.x1-Game.camX, p.y1-Game.camY, 5+p.t*40, 0, 7); ctx.fill();
+    } else if(p.type === "explosion"){
+      const life = p.life||0.4;
+      const a = Math.max(0, 1-p.t/life);
+      const sx = p.x1-Game.camX, sy = p.y1-Game.camY;
+      ctx.fillStyle = `rgba(255,140,40,${a})`;
+      ctx.beginPath(); ctx.arc(sx, sy, 6+p.t*60, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = `rgba(255,230,120,${a})`;
+      ctx.beginPath(); ctx.arc(sx, sy, 3+p.t*30, 0, Math.PI*2); ctx.fill();
     }
   }
 }
@@ -1192,14 +1246,16 @@ function drawWebLine(){
 function drawHazards(){
   for(const h of hazards){
     const sx = h.x-Game.camX, sy=h.y-Game.camY;
-    if(h.type==="orb"){
-      if(h.t < h.delay){
-        ctx.fillStyle = "rgba(255,111,216,0.5)";
-        ctx.beginPath(); ctx.arc(sx,sy,h.r+3*Math.sin(h.t*10),0,7); ctx.fill();
-      } else {
-        ctx.fillStyle = "rgba(255,111,216,0.9)";
-        ctx.beginPath(); ctx.arc(sx,sy,h.r,0,7); ctx.fill();
-      }
+    if(h.type==="fist"){
+      const ang = Math.atan2(h.vy||0, h.vx||1);
+      ctx.save(); ctx.translate(sx,sy); ctx.rotate(ang);
+      ctx.fillStyle = "#e8c99a";
+      ctx.beginPath(); ctx.arc(0,0,h.r,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.beginPath(); ctx.arc(-6,-7,5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(6,-7,5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0,-9,5,0,Math.PI*2); ctx.fill();
+      ctx.restore();
     } else if(h.type==="shuriken"){
       ctx.save(); ctx.translate(sx,sy); ctx.rotate(h.spin||0);
       ctx.fillStyle="#c8c8c8";
@@ -1211,16 +1267,107 @@ function drawHazards(){
       ctx.beginPath(); ctx.moveTo(sx,sy);
       ctx.lineTo(sx+Math.cos(h.angle)*len, sy+Math.sin(h.angle)*len);
       ctx.stroke();
-    } else if(h.type==="charge"){
-      ctx.fillStyle="#eef0f0";
-      ctx.fillRect(sx-h.w/2, sy-h.h/2, h.w, h.h);
-      ctx.fillStyle="#2a2a2a";
-      ctx.fillRect(sx-h.w/2, sy-h.h/2, h.w, 10);
     } else if(h.type==="shockwave"){
-      ctx.strokeStyle="rgba(76,175,80,0.85)"; ctx.lineWidth=6;
-      ctx.beginPath(); ctx.arc(sx, h.groundY-Game.camY, Math.max(1,h.r||1), Math.PI, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = h.color || "rgba(76,175,80,0.85)";
+      ctx.lineWidth = 6;
+      ctx.globalAlpha = Math.max(0, 1 - h.t/h.life);
+      ctx.beginPath(); ctx.arc(sx, sy, Math.max(1,h.r||1), 0, Math.PI*2); ctx.stroke();
+      ctx.globalAlpha = 1;
     }
   }
+}
+
+function shadeColor(hex, amt){
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.min(255, (n>>16) + amt));
+  const g = Math.max(0, Math.min(255, ((n>>8)&0xff) + amt));
+  const b = Math.max(0, Math.min(255, (n&0xff) + amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+// 악당들을 사각형이 아니라 스파이더맨과 같은 픽셀 그리드 방식의 사람 형상으로 그린다
+function drawVillainBody(type, cfg){
+  const px = 3;
+  const bob = Math.sin(Game.elapsed*5)*2;
+  const armSwing = Math.sin(Game.elapsed*6)*5;
+  const scale = type==="hulk" ? 1.3 : 1;
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.translate(0, bob);
+
+  // 다리
+  ctx.strokeStyle = shadeColor(cfg.suit,-20); ctx.lineWidth = 8; ctx.lineCap = "square";
+  ctx.beginPath(); ctx.moveTo(-7,20); ctx.lineTo(-9,36); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(7,20); ctx.lineTo(9,36); ctx.stroke();
+
+  if(type === "scorpion"){
+    // 등 뒤로 말려있는 전갈 꼬리
+    ctx.strokeStyle = cfg.suit; ctx.lineWidth = 6; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-6,4);
+    ctx.bezierCurveTo(-30,-4, -34,-28, -14,-30);
+    ctx.stroke();
+    ctx.fillStyle = cfg.accent;
+    ctx.beginPath(); ctx.moveTo(-14,-30); ctx.lineTo(-4,-34); ctx.lineTo(-10,-22); ctx.closePath(); ctx.fill();
+  }
+
+  // 몸통
+  drawPixelCircleGrid(0,8,17,px,(gx,gy,d,r)=>{
+    if(d>r-3) return "#0a0a0a";
+    if(gx*gy>0 && d>r*0.6) return shadeColor(cfg.suit,-25);
+    return cfg.suit;
+  });
+
+  if(type === "tombstone"){
+    // 넥타이
+    ctx.fillStyle = cfg.accent;
+    ctx.beginPath(); ctx.moveTo(-4,-2); ctx.lineTo(4,-2); ctx.lineTo(0,20); ctx.closePath(); ctx.fill();
+  }
+  if(type === "hulk"){
+    // 보라색 반바지
+    ctx.fillStyle = cfg.accent;
+    ctx.fillRect(-15,16,30,10);
+  }
+
+  // 머리
+  drawPixelCircleGrid(0,-14,13,px,(gx,gy,d,r)=>{
+    if(d>r-3) return "#0a0a0a";
+    if(gx*gy>0 && d>r*0.55) return shadeColor(cfg.hair,-25);
+    return cfg.hair;
+  });
+
+  if(type === "jeanGrey"){
+    // 불타오르는 듯한 머리카락(피닉스)
+    ctx.fillStyle = cfg.hair;
+    [[-14,-24],[14,-24],[-10,-30],[10,-30],[0,-32]].forEach(([px2,py2])=>{
+      ctx.beginPath(); ctx.moveTo(px2*0.4,-14); ctx.lineTo(px2,py2); ctx.lineTo(px2*0.6,-18); ctx.closePath(); ctx.fill();
+    });
+  }
+  if(type === "theHand"){
+    // 눈만 남기는 검은 복면
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(-12,-19,24,9);
+  }
+
+  // 눈
+  ctx.fillStyle = (type==="theHand") ? "#ffffff" : "#ffffff";
+  ctx.fillRect(-8,-16,5,5); ctx.fillRect(3,-16,5,5);
+  if(type !== "theHand"){
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(-7,-15,3,3); ctx.fillRect(4,-15,3,3);
+  }
+
+  // 팔
+  ctx.strokeStyle = cfg.suit; ctx.lineWidth = 8; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-15,2); ctx.lineTo(-24,10+armSwing); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(15,2); ctx.lineTo(24,10-armSwing); ctx.stroke();
+  if(type === "tombstone"){
+    ctx.fillStyle = cfg.skin;
+    ctx.beginPath(); ctx.arc(-24,10+armSwing,7,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(24,10-armSwing,7,0,Math.PI*2); ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 function drawVillainEncounter(){
@@ -1237,12 +1384,7 @@ function drawVillainEncounter(){
     ctx.shadowColor = "#ff2e63"; ctx.shadowBlur = 20;
   }
   ctx.translate(sx,sy);
-  ctx.fillStyle = cfg.color;
-  ctx.fillRect(-18,-26,36,44);
-  ctx.fillStyle = cfg.accent;
-  ctx.fillRect(-18,-26,36,10);
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(-8,-20,6,6); ctx.fillRect(4,-20,6,6);
+  drawVillainBody(cp.type, cfg);
   ctx.restore();
 
   ctx.globalAlpha = alpha;
@@ -1264,10 +1406,10 @@ function roundRect(x,y,w,h,r){
   ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
 }
 
-function drawSpeechBubbleCanvas(x,y,text){
+function drawSpeechBubbleCanvas(x,y,text,bg){
   ctx.font = "bold 11px sans-serif";
   const w = ctx.measureText(text).width + 16;
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = bg || "#fff";
   roundRect(x-w/2, y-24, w, 22, 6); ctx.fill();
   ctx.fillStyle = "#1a1a1a";
   ctx.textAlign = "center";
@@ -1455,6 +1597,18 @@ function render(){
   drawVillainEncounter();
   drawAlly();
   drawPlayer();
+  drawPlayerSpeech();
+  ctx.restore();
+}
+
+function drawPlayerSpeech(){
+  if(Player.speechTimer <= 0 || !Player.speechText) return;
+  const px = Player.x - Game.camX;
+  const py = Player.y - Game.camY;
+  const isWarning = Player.speechText === SENSE_WARNING_TEXT;
+  ctx.save();
+  if(isWarning) ctx.globalAlpha = 0.6 + 0.4*Math.abs(Math.sin(Game.elapsed*16));
+  drawSpeechBubbleCanvas(px, py-34, Player.speechText, isWarning ? "#ffdede" : "#ffffff");
   ctx.restore();
 }
 
@@ -1521,7 +1675,6 @@ function hideGameplayUI(){
 function resetWorld(){
   buildings = []; obstacles = []; particles = []; landmarks = []; hazards = [];
   spawnDronesIfNeeded._nextX = 0;
-  spawnCraneIfNeeded._nextX = 0;
   buildingsUntilPhoto = pick([7,8]);
   Game.score = 0; Game.hearts = Game.maxHearts; Game.elapsed = 0; Game.invulnT = 1.0; Game.ended = false;
   Player.x = 100; Player.y = WORLD_BASE_Y - H*0.55; Player.vx = 120; Player.vy = 0;
@@ -1628,6 +1781,14 @@ document.getElementById("restartBtn").addEventListener("click", ()=>{
 document.getElementById("homeBtn").addEventListener("click", ()=>{
   // 대기 타이머는 그대로 유지한 채 홈(시작 화면)으로만 돌아간다 - 카운트다운은 계속 진행됨
   document.getElementById("gameOverScreen").classList.add("hidden");
+  document.getElementById("startScreen").classList.remove("hidden");
+});
+document.getElementById("guideBtn").addEventListener("click", ()=>{
+  document.getElementById("startScreen").classList.add("hidden");
+  document.getElementById("guideScreen").classList.remove("hidden");
+});
+document.getElementById("guideCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("guideScreen").classList.add("hidden");
   document.getElementById("startScreen").classList.remove("hidden");
 });
 document.getElementById("endingRestartBtn").addEventListener("click", ()=>{
