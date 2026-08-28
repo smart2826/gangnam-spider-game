@@ -192,12 +192,15 @@
     <div id="gameOverScreen" class="overlay hidden">
       <div class="title-logo" style="font-size:22px;">GAME OVER</div>
       <div class="sub-logo">최종 기록: <b id="finalScore">0</b>m</div>
+      <div class="sub-logo" style="font-size:13px;opacity:0.85;">🏆 최고 기록: <b id="gameOverBestScore">0</b>m</div>
 
       <div class="panel-label">다음 게임까지 대기 시간</div>
       <div class="timer-big" id="waitTimer">05:00</div>
 
       <button id="restartBtn" disabled>대기 후 다시 시작</button>
       <button id="homeBtn" class="ghost-btn">🏠 홈으로</button>
+      <button id="shareBtnGameOver" class="ghost-btn">📤 기록 공유하기</button>
+      <div class="pay-status" id="shareStatusGameOver"></div>
 
       <button id="kakaoPayBtn" class="kakao-pay-btn">
         <span style="font-size:16px;">💛</span> 부활하기
@@ -219,7 +222,10 @@
       </div>
       <div class="small-note" style="color:#ffd7e2;">"해냈구나 피터! 우리가 기다리고 있었어 😊" — MJ<br>"역시 내 친구가 최고야, 대단해!" — 네드</div>
       <div class="sub-logo" style="margin-top:14px;">최종 기록: <b id="endingScore">0</b>m · 사진 <b id="endingPhotos">0</b>장 수집</div>
+      <div class="sub-logo" style="font-size:13px;opacity:0.85;">🏆 최고 기록: <b id="endingBestScore">0</b>m</div>
       <button id="endingRestartBtn">🕸️ 다시 플레이</button>
+      <button id="shareBtnEnding" class="ghost-btn">📤 기록 공유하기</button>
+      <div class="pay-status" id="shareStatusEnding"></div>
     </div>
 
   </div>
@@ -278,6 +284,40 @@ const KAKAO_CONFIG = {
 const WAIT_SECONDS = 300; // 5분 패널티
 const STORAGE_KEY_WAIT_UNTIL = "gnSpider_waitUntil";
 const STORAGE_KEY_PENDING_SETTINGS = "gnSpider_pendingSettings";
+const STORAGE_KEY_BEST_SCORE = "gnSpider_bestScore";
+
+function getBestScore(){
+  return parseInt(localStorage.getItem(STORAGE_KEY_BEST_SCORE) || "0", 10);
+}
+function updateBestScore(score){
+  const best = getBestScore();
+  if(score > best){ localStorage.setItem(STORAGE_KEY_BEST_SCORE, String(score)); return score; }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
+// 기록 공유하기: Web Share API 사용 (모바일에서는 카카오톡을 포함한 공유 시트가 뜸)
+// 지원하지 않는 환경(대부분의 데스크톱 브라우저)에서는 클립보드 복사로 대체
+// ---------------------------------------------------------------------------
+function shareRecord(score, statusElId){
+  const url = location.origin + location.pathname;
+  const best = updateBestScore(score);
+  const text = `🕸️ 강남 스파이더맨 스윙 러너\n내 최고 기록: ${best}m\n너도 도전해봐!`;
+  const statusEl = statusElId ? document.getElementById(statusElId) : null;
+  const showStatus = (msg)=>{ if(statusEl){ statusEl.textContent = msg; setTimeout(()=>{ statusEl.textContent = ""; }, 2500); } };
+
+  if(navigator.share){
+    navigator.share({ title: "강남 스파이더맨", text, url }).catch(()=>{ /* 사용자 취소 등은 무시 */ });
+    return;
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text + "\n" + url)
+      .then(()=> showStatus("복사 완료! 카카오톡에 붙여넣어 공유해보세요 💬"))
+      .catch(()=> showStatus(text + "\n" + url));
+  } else {
+    showStatus(text + "\n" + url);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 스킨 컬러 팔레트
@@ -483,9 +523,6 @@ function updateWeather(dt){
 
 let lastTime = 0;
 let rafId = null;
-
-window.__debug = { Game, Journey, Player };
-
 
 /* =========================================================================
    2. CANVAS SIZING
@@ -1904,6 +1941,7 @@ function triggerGameOver(){
   Journey.activeVillainCP = null; Journey.activeAlly = null;
   hideGameplayUI();
   document.getElementById("finalScore").textContent = Game.score;
+  document.getElementById("gameOverBestScore").textContent = updateBestScore(Game.score);
   document.getElementById("gameOverScreen").classList.remove("hidden");
   document.getElementById("payStatus").textContent = "";
   const until = Date.now() + WAIT_SECONDS*1000;
@@ -1916,6 +1954,7 @@ function triggerEnding(){
   hideGameplayUI();
   document.getElementById("endingScore").textContent = Game.score;
   document.getElementById("endingPhotos").textContent = Journey.photosCollected;
+  document.getElementById("endingBestScore").textContent = updateBestScore(Game.score);
   document.getElementById("endingScreen").classList.remove("hidden");
 }
 
@@ -1986,6 +2025,12 @@ document.getElementById("homeBtn").addEventListener("click", ()=>{
   // 대기 타이머는 그대로 유지한 채 홈(시작 화면)으로만 돌아간다 - 카운트다운은 계속 진행됨
   document.getElementById("gameOverScreen").classList.add("hidden");
   document.getElementById("startScreen").classList.remove("hidden");
+});
+document.getElementById("shareBtnGameOver").addEventListener("click", ()=>{
+  shareRecord(Game.score, "shareStatusGameOver");
+});
+document.getElementById("shareBtnEnding").addEventListener("click", ()=>{
+  shareRecord(Game.score, "shareStatusEnding");
 });
 document.getElementById("guideBtn").addEventListener("click", ()=>{
   document.getElementById("startScreen").classList.add("hidden");
