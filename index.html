@@ -356,8 +356,28 @@ const Game = {
   speedMul: 1,
   elapsed: 0,
   camX: 0,
-  camY: 0
+  camY: 0,
+  dayNightBlend: 0 // 0=완전한 낮, 1=완전한 밤 - 이동 거리에 따라 계속 순환하며 바뀐다
 };
+
+// 낮/밤이 한 바퀴 도는 데 걸리는 거리(월드 유닛). 약 4000m마다 낮<->밤이 한 번씩 바뀐다.
+const DAYNIGHT_CYCLE_WORLD = 48000;
+
+function updateDayNight(){
+  const t = ((Player.x % DAYNIGHT_CYCLE_WORLD) + DAYNIGHT_CYCLE_WORLD) % DAYNIGHT_CYCLE_WORLD / DAYNIGHT_CYCLE_WORLD;
+  const wave = (1 - Math.cos(2*Math.PI*t)) / 2; // 0(낮) -> 1(밤) -> 0(낮) 를 계속 반복
+  // 낮으로 시작했으면 첫 구간이 점점 밤이 되도록, 밤으로 시작했으면 반대 위상으로 시작한다
+  Game.dayNightBlend = Game.theme === "night" ? (1 - wave) : wave;
+}
+
+function lerpColor(hexA, hexB, t){
+  t = Math.max(0, Math.min(1, t));
+  const a = parseInt(hexA.slice(1),16), b = parseInt(hexB.slice(1),16);
+  const ar=(a>>16)&255, ag=(a>>8)&255, ab=a&255;
+  const br=(b>>16)&255, bg=(b>>8)&255, bb=b&255;
+  const r = Math.round(ar+(br-ar)*t), g = Math.round(ag+(bg-ag)*t), bl = Math.round(ab+(bb-ab)*t);
+  return `rgb(${r},${g},${bl})`;
+}
 
 // 빌딩 등 배경 요소의 월드 좌표 기준선(화면 크기와 무관한 고정값) - 바닥이 없으므로 화면에 종속되지 않는다
 const WORLD_BASE_Y = 1000;
@@ -392,6 +412,7 @@ const Journey = {
   activeVillainCP: null,   // {type,phase,phaseT,heartsAtStart,screenX,screenY}
   allyGauge: 0,
   photosSinceAlly: 0,      // 액자 3개당 조력자 등장
+  lastAllyType: null,      // 직전 조력자 - 같은 조력자가 연달아 나오지 않게 함
   activeAlly: null,        // {type:'may'|'punisher', t, duration, fireTimer}
   senseGauge: 0,
   senseWarned: false,      // 무적 발동 직전 "몸이 이상해!" 대사를 한 번만 띄우기 위한 플래그
@@ -419,13 +440,52 @@ const Player = {
 let buildings = [];     // {x,w,h,type,windowSeed,hasPhoto,photoTaken,photoY}
 let obstacles = [];     // {type,x,y,w,h,vx,vy,phase,dead}
 let hazards = [];       // villain attack hitboxes {type,x,y,...,dead}
+let missiles = [];      // 아이언맨의 유도 미사일 {x,y,vx,vy,targetObs,trail,dead}
 let particles = [];     // simple web / impact / pickup particles
 let landmarks = [];     // background decorations (hand statue, big signs)
 let stars = [];
+let raindrops = [];     // 화면 좌표계 기준 빗방울(월드 스크롤과 무관하게 계속 순환)
 let buildingsUntilPhoto = 7; // 액자는 빌딩 7~8개당 1개꼴로 등장
+
+// ---------------------------------------------------------------------------
+// 날씨(비) - 가끔씩 한동안 비가 내렸다가 그친다
+// ---------------------------------------------------------------------------
+const RAIN_CHECK_INTERVAL_WORLD = 30000; // 약 2500m마다 비가 올지 판정
+const Weather = { raining:false, timer:0, nextCheckX:RAIN_CHECK_INTERVAL_WORLD };
+
+function seedRain(){
+  raindrops = [];
+  for(let i=0;i<90;i++){
+    raindrops.push({ x:rand(0,1400), y:rand(0,900), speed:rand(650,950), len:rand(12,22) });
+  }
+}
+
+function updateWeather(dt){
+  if(Weather.raining){
+    Weather.timer -= dt;
+    if(Weather.timer <= 0) Weather.raining = false;
+  }
+  if(Player.x >= Weather.nextCheckX){
+    Weather.nextCheckX += RAIN_CHECK_INTERVAL_WORLD;
+    if(!Weather.raining && Math.random() < 0.45){
+      Weather.raining = true;
+      Weather.timer = rand(9, 16);
+    }
+  }
+  if(Weather.raining){
+    for(const d of raindrops){
+      d.y += d.speed*dt;
+      d.x -= 60*dt; // 살짝 대각선으로 떨어지는 느낌
+      if(d.y > VH+20){ d.y = -20; d.x = rand(-100, VW+100); }
+    }
+  }
+}
 
 let lastTime = 0;
 let rafId = null;
+
+window.__debug = { Game, Journey, Player };
+
 
 /* =========================================================================
    2. CANVAS SIZING
@@ -651,6 +711,8 @@ function update(dt){
   if(Game.invulnT > 0) Game.invulnT -= dt;
   updateSpiderSense(dt);
   updateMonologue(dt);
+  updateDayNight();
+  updateWeather(dt);
 
   if(Player.mode === "swing" && Player.anchor){
     const L = Player.ropeLen;
@@ -704,6 +766,7 @@ function update(dt){
   updateHazards(dt);
   checkHazardCollisions();
   updateAlly(dt);
+  updateMissiles(dt);
   checkEnding();
   updateHUD();
 }
@@ -713,7 +776,7 @@ function updateObstacles(dt){
   for(const o of obstacles){
     if(o.type === "drone"){
       if(punisherActive){
-        // 퍼니셔가 나와 있는 동안에는 새로 나타나는 드론도 곧바로 폭파된다
+        // 퍼니셔가 나와 있는 동안에는 새로 나타나는 드론도 곧바로 폭파된다 (아이언맨은 유도 미사일로 직접 쫓아간다)
         o.dead = true;
         particles.push({type:"explosion", x1:o.x, y1:o.y, t:0, life:0.4});
         continue;
@@ -857,6 +920,7 @@ function generateJourney(){
   Journey.allyGauge = 0;
   Journey.photosSinceAlly = 0;
   Journey.activeAlly = null;
+  Journey.lastAllyType = null;
   Journey.senseGauge = 0;
   Journey.senseWarned = false;
   Journey.invincibleUntil = -1;
@@ -945,8 +1009,8 @@ function updateHazards(dt){
     } else if(h.type==="shockwave"){
       h.r = (h.t/h.life)*h.maxR;
     }
-    // Punisher ally auto-clears fresh hazards (fights alongside the player)
-    if(Journey.activeAlly && Journey.activeAlly.type==="punisher" && h.t>0.3 && !h.dead){
+    // Punisher/Iron Man ally auto-clears fresh hazards (fights alongside the player)
+    if(Journey.activeAlly && (Journey.activeAlly.type==="punisher" || Journey.activeAlly.type==="ironman") && h.t>0.3 && !h.dead){
       h.dead = true;
       particles.push({type:"bulletpop", x1:h.x, y1:h.y, t:0, life:0.2});
     }
@@ -979,17 +1043,25 @@ function checkHazardCollisions(){
    5d. ALLIES (메이 숙모 / 퍼니셔)
    ========================================================================= */
 
+const ALLY_TYPES = ["may","punisher","ironman"];
+
 function tryTriggerAlly(){
   if(Journey.photosSinceAlly < 3 || Journey.activeAlly) return;
   Journey.photosSinceAlly = 0;
   Journey.allyGauge = 0;
-  const type = Math.random() < 0.5 ? "may" : "punisher";
+  // 직전과 같은 조력자가 연달아 나오지 않도록 나머지 중에서 랜덤 선택
+  const options = ALLY_TYPES.filter(t => t !== Journey.lastAllyType);
+  const type = options[(Math.random()*options.length)|0];
+  Journey.lastAllyType = type;
   if(type==="may"){
     Journey.activeAlly = { type:"may", t:0, duration:3.0 };
     Game.hearts = Math.min(Game.maxHearts, Game.hearts+1);
-  } else {
+  } else if(type==="punisher"){
     Journey.activeAlly = { type:"punisher", t:0, duration:8.0, fireTimer:0 };
     explodeAllDrones(); // 퍼니셔 등장 - 화면에 있는 드론들을 모두 폭파시킨다
+  } else {
+    Journey.activeAlly = { type:"ironman", t:0, duration:5.0, fireTimer:0 };
+    interruptVillainEncounter(); // 진행 중인 악당 공격은 즉시 해치우고, 드론은 유도 미사일로 하나씩 쫓아가서 없앤다
   }
 }
 
@@ -1003,6 +1075,57 @@ function explodeAllDrones(){
   }
 }
 
+// 아이언맨의 미사일로 현재 진행 중인 악당 공격을 즉시 해치운다 (이미 물러가는 중이면 다시 건드리지 않음)
+function interruptVillainEncounter(){
+  const cp = Journey.activeVillainCP;
+  if(cp && cp.phase !== "resolve"){
+    particles.push({type:"explosion", x1:Game.camX+cp.screenX, y1:cp.screenY+Game.camY, t:0, life:0.5});
+    cp.phase = "resolve"; cp.phaseT = 0;
+  }
+}
+
+// 아직 미사일이 쫓고 있지 않은 드론 중 가장 가까운 것을 찾는다
+function findUnlockedDrone(){
+  // 이미 지나쳐서 곧 화면 밖으로 사라질 드론은 잡지 않고, 앞쪽에 있는 드론만 추적한다
+  let best = null, bestD = Infinity;
+  for(const o of obstacles){
+    if(o.type === "drone" && !o.dead && !o.missileLocked && o.x > Player.x - 40){
+      const d = Math.abs(o.x - Player.x);
+      if(d < bestD){ bestD = d; best = o; }
+    }
+  }
+  return best;
+}
+
+function launchMissile(target){
+  target.missileLocked = true;
+  missiles.push({ x:Player.x+30, y:Player.y-30, vx:undefined, vy:undefined, targetObs:target, speed:520, trail:[], dead:false });
+}
+
+function updateMissiles(dt){
+  for(const m of missiles){
+    m.t = (m.t||0) + dt;
+    const target = m.targetObs;
+    // 목표가 사라졌거나(격추됨) 화면 밖으로 너무 멀리 벗어났거나, 너무 오래 못 따라잡으면 스스로 소멸한다
+    if(!target || target.dead || target.x < Game.camX - 400 || m.t > 4){ m.dead = true; continue; }
+    const dx = target.x - m.x, dy = target.y - m.y;
+    const dist = Math.hypot(dx,dy) || 1;
+    const dvx = dx/dist*m.speed, dvy = dy/dist*m.speed;
+    // 처음엔 위로 솟구쳤다가 목표를 향해 유도되는 탄도미사일 느낌
+    if(m.vx===undefined){ m.vx = dvx*0.2; m.vy = -260; }
+    else { m.vx += (dvx-m.vx)*Math.min(1,dt*3.5); m.vy += (dvy-m.vy)*Math.min(1,dt*3.5); }
+    m.x += m.vx*dt; m.y += m.vy*dt;
+    m.trail.push({x:m.x, y:m.y});
+    if(m.trail.length > 7) m.trail.shift();
+    if(dist < 26){
+      target.dead = true;
+      particles.push({type:"explosion", x1:target.x, y1:target.y, t:0, life:0.4});
+      m.dead = true;
+    }
+  }
+  missiles = missiles.filter(m=>!m.dead);
+}
+
 function updateAlly(dt){
   const a = Journey.activeAlly;
   if(!a) return;
@@ -1013,6 +1136,14 @@ function updateAlly(dt){
       a.fireTimer = 0.45;
       particles.push({type:"bulletpop", x1:Player.x+70, y1:Player.y-10, t:0, life:0.15});
     }
+  } else if(a.type==="ironman"){
+    a.fireTimer -= dt;
+    if(a.fireTimer<=0){
+      const target = findUnlockedDrone();
+      if(target){ launchMissile(target); a.fireTimer = 0.6; }
+      else a.fireTimer = 0.25;
+    }
+    interruptVillainEncounter(); // 지속 시간 내내 새로 나오는 악당 공격도 즉시 처리
   }
   if(a.t >= a.duration) Journey.activeAlly = null;
 }
@@ -1033,15 +1164,10 @@ function checkEnding(){
 
 function skyGradient(){
   const g = ctx.createLinearGradient(0,0,0,VH);
-  if(Game.theme === "day"){
-    g.addColorStop(0, "#7fc7ff");
-    g.addColorStop(0.6, "#bfe6ff");
-    g.addColorStop(1, "#e8f6ff");
-  } else {
-    g.addColorStop(0, "#050615");
-    g.addColorStop(0.55, "#0c0f2b");
-    g.addColorStop(1, "#1a1338");
-  }
+  const nb = Game.dayNightBlend;
+  g.addColorStop(0, lerpColor("#7fc7ff","#050615",nb));
+  g.addColorStop(0.55, lerpColor("#bfe6ff","#0c0f2b",nb));
+  g.addColorStop(1, lerpColor("#e8f6ff","#1a1338",nb));
   return g;
 }
 
@@ -1049,16 +1175,18 @@ function drawBackground(){
   ctx.fillStyle = skyGradient();
   ctx.fillRect(0,0,VW,VH);
 
-  if(Game.theme === "night"){
+  const nb = Game.dayNightBlend;
+  if(nb > 0.04){
     for(const s of stars){
       const sx = ((s.x - Game.camX*0.05) % (VW+100) + (VW+100)) % (VW+100) - 50;
       const tw = 0.5+0.5*Math.sin(Game.elapsed*2+s.tw);
-      ctx.fillStyle = `rgba(255,255,255,${0.3+0.5*tw})`;
+      ctx.fillStyle = `rgba(255,255,255,${(0.3+0.5*tw)*nb})`;
       ctx.fillRect(sx, s.y, s.r*2, s.r*2);
     }
-  } else {
+  }
+  if(nb < 0.96){
     // clouds
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillStyle = `rgba(255,255,255,${0.85*(1-nb)})`;
     for(let i=0;i<4;i++){
       const cx = ((i*420 - Game.camX*0.1) % (VW+300) + (VW+300)) % (VW+300) - 150;
       pixelCloud(cx, 60+i*24);
@@ -1066,8 +1194,7 @@ function drawBackground(){
   }
 
   // far parallax buildings (silhouette layer) - 세로 카메라를 절반만 따라가서 근경 빌딩과 이어져 보이게 한다
-  const farColor = Game.theme==="day" ? "#a9c9e6" : "#141033";
-  ctx.fillStyle = farColor;
+  ctx.fillStyle = lerpColor("#a9c9e6","#141033", nb);
   const farBase = VH - 70 - Game.camY*0.5;
   for(let i=-1;i<8;i++){
     const bw = 90, bx = ((i*140) - (Game.camX*0.3)%140);
@@ -1085,6 +1212,7 @@ function pixelCloud(x,y){
 }
 
 function drawBuildings(){
+  const nb = Game.dayNightBlend;
   for(const b of buildings){
     const sx = b.x - Game.camX;
     if(sx+b.w < -20 || sx > VW+20) continue;
@@ -1092,30 +1220,26 @@ function drawBuildings(){
     const top = groundSY - b.h;
     // 바닥이 없어도 화면 어디를 비추든 항상 "현재 화면의 맨 아래"까지는 반드시 채운다
     const visualBottom = Math.max(groundSY + BUILDING_VISUAL_DEPTH, VH + 60);
-    const isNight = Game.theme === "night";
     if(top > VH+40 || visualBottom < -40) continue; // 세로 카메라 밖이면 그리지 않음
-    ctx.fillStyle = isNight ? "#171426" : (b.type==="landmark" ? "#8fa6c2" : "#c7cdd6");
+    ctx.fillStyle = lerpColor(b.type==="landmark" ? "#8fa6c2" : "#c7cdd6", "#171426", nb);
     ctx.fillRect(sx, top, b.w, visualBottom-top);
-    ctx.fillStyle = isNight ? "#0c0a18" : "#a6adb8";
+    ctx.fillStyle = lerpColor("#a6adb8","#0c0a18",nb);
     ctx.fillRect(sx, top, 6, visualBottom-top);
 
-    // windows grid (pixel style)
+    // windows grid (pixel style) - 낮/밤에 따라 불 켜진 창문 색과 비율이 서서히 바뀐다
     const wStep = 12, hStep = 16;
+    const litThreshold = 0.85 - nb*0.4; // 낮 0.85(적게 켜짐) -> 밤 0.45(많이 켜짐)
     for(let wy = top+10; wy < visualBottom-8; wy += hStep){
       for(let wx = sx+8; wx < sx+b.w-8; wx += wStep){
-        const lit = ((Math.sin((wx*7+wy*13+b.seed)*1.0)+1)/2) > (isNight?0.45:0.85);
-        if(isNight){
-          ctx.fillStyle = lit ? "#ffdf7a" : "#25213a";
-        } else {
-          ctx.fillStyle = lit ? "#7fb4e0" : "#e6eaf0";
-        }
+        const lit = ((Math.sin((wx*7+wy*13+b.seed)*1.0)+1)/2) > litThreshold;
+        ctx.fillStyle = lit ? lerpColor("#7fb4e0","#ffdf7a",nb) : lerpColor("#e6eaf0","#25213a",nb);
         ctx.fillRect(wx, wy, 6, 8);
       }
     }
 
     if(b.type === "landmark"){
       // spire (lotte-tower-ish)
-      ctx.fillStyle = isNight ? "#2a2440" : "#8fa6c2";
+      ctx.fillStyle = lerpColor("#8fa6c2","#2a2440",nb);
       const spireW = b.w*0.18;
       ctx.beginPath();
       ctx.moveTo(sx+b.w/2-spireW/2, top);
@@ -1123,21 +1247,24 @@ function drawBuildings(){
       ctx.lineTo(sx+b.w/2, top-60);
       ctx.closePath();
       ctx.fill();
-      if(isNight){
+      if(nb > 0.5){
+        ctx.globalAlpha = Math.min(1,(nb-0.5)*2);
         ctx.fillStyle = "#ff5a7a";
         ctx.fillRect(sx+b.w/2-2, top-70, 4, 10);
+        ctx.globalAlpha = 1;
       }
     }
 
-    if(isNight && b.neon){
+    if(b.neon && nb > 0.25){
+      ctx.globalAlpha = Math.min(1,(nb-0.25)/0.35) * 0.85;
       ctx.fillStyle = b.hue;
-      ctx.globalAlpha = 0.85;
       ctx.fillRect(sx+8, top+10, b.w-16, 14);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = Math.min(1,(nb-0.25)/0.35);
       ctx.fillStyle = "#0c0a18";
       ctx.font = "10px monospace";
       ctx.textAlign = "center";
       ctx.fillText("GANGNAM", sx+b.w/2, top+20);
+      ctx.globalAlpha = 1;
     }
 
     if(b.hasPhoto && !b.photoTaken){
@@ -1169,7 +1296,7 @@ function drawLandmarks(){
 
 function drawHandStatue(x, groundY){
   // 강남스타일 손모양 조형물 (simplified pixel silhouette)
-  ctx.fillStyle = Game.theme==="night" ? "#3a3450" : "#b0a58f";
+  ctx.fillStyle = lerpColor("#b0a58f","#3a3450", Game.dayNightBlend);
   ctx.fillRect(x-14, groundY-40, 28, 40); // base
   ctx.fillRect(x-24, groundY-120, 48, 70); // palm
   for(let i=0;i<4;i++){ ctx.fillRect(x-22+i*13, groundY-160, 10, 44); } // fingers
@@ -1177,12 +1304,12 @@ function drawHandStatue(x, groundY){
 }
 
 function drawBillboard(x,y,text){
-  const night = Game.theme==="night";
-  ctx.fillStyle = night ? "#0c0a18" : "#ffffff";
+  const nb = Game.dayNightBlend;
+  ctx.fillStyle = lerpColor("#ffffff","#0c0a18",nb);
   ctx.fillRect(x-46, y, 92, 30);
-  ctx.strokeStyle = night ? "#ff2e63" : "#333";
+  ctx.strokeStyle = lerpColor("#333","#ff2e63",nb);
   ctx.strokeRect(x-46, y, 92, 30);
-  ctx.fillStyle = night ? "#2effc7" : "#222";
+  ctx.fillStyle = lerpColor("#222","#2effc7",nb);
   ctx.font = "bold 13px sans-serif";
   ctx.textAlign = "center";
   ctx.fillText(text, x, y+20);
@@ -1445,7 +1572,7 @@ function drawAlly(){
     ctx.textAlign = "center";
     ctx.fillText("👵", sx, sy);
     if(a.t < 2.4) drawSpeechBubbleCanvas(sx, sy-18, "큰 힘에는 큰 책임이 따른다");
-  } else {
+  } else if(a.type==="punisher"){
     ctx.font = "28px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("💀", sx, sy);
@@ -1453,6 +1580,14 @@ function drawAlly(){
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(sx+14,sy-4); ctx.lineTo(sx+66,sy-4); ctx.stroke();
     if(a.t < 1.2) drawSpeechBubbleCanvas(sx, sy-18, "내가 엄호한다!");
+  } else if(a.type==="ironman"){
+    ctx.font = "30px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("🤖", sx, sy);
+    ctx.strokeStyle = "rgba(255,140,60,0.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(sx+14,sy-2); ctx.lineTo(sx+70,sy-2); ctx.stroke();
+    if(a.t < 2.6) drawSpeechBubbleCanvas(sx, sy-18, "슈트 없이 아무것도 아니라면 더더욱 슈트를 가져선 안 돼");
   }
 }
 
@@ -1613,12 +1748,57 @@ function render(){
   drawParticles();
   drawWebLine();
   drawObstacles();
+  drawMissiles();
   drawHazards();
   drawVillainEncounter();
   drawAlly();
   drawPlayer();
   drawPlayerSpeech();
+  drawRain(); // 화면 맨 앞에 내리는 비 - 항상 최상단에 겹쳐 그린다
   ctx.restore();
+}
+
+function drawRain(){
+  if(!Weather.raining) return;
+  const fade = Math.min(1, Weather.timer>1 ? 1 : Weather.timer); // 그치기 직전 서서히 약해짐
+  ctx.strokeStyle = `rgba(190,210,235,${0.5*fade})`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for(const d of raindrops){
+    ctx.moveTo(d.x, d.y);
+    ctx.lineTo(d.x-4, d.y+d.len);
+  }
+  ctx.stroke();
+  // 화면 전체에 살짝 어두운 청색 톤을 덧씌워 비 오는 분위기를 낸다
+  ctx.fillStyle = `rgba(20,30,60,${0.12*fade})`;
+  ctx.fillRect(0,0,VW,VH);
+}
+
+function drawMissiles(){
+  for(const m of missiles){
+    const sx = m.x-Game.camX, sy = m.y-Game.camY;
+    if(m.trail.length>1){
+      ctx.strokeStyle = "rgba(210,210,220,0.55)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      m.trail.forEach((p,i)=>{
+        const psx=p.x-Game.camX, psy=p.y-Game.camY;
+        if(i===0) ctx.moveTo(psx,psy); else ctx.lineTo(psx,psy);
+      });
+      ctx.stroke();
+    }
+    const ang = Math.atan2(m.vy||-1, m.vx||0.001);
+    ctx.save();
+    ctx.translate(sx,sy);
+    ctx.rotate(ang);
+    ctx.fillStyle = "#d8dadf";
+    ctx.fillRect(-9,-3,18,6);
+    ctx.fillStyle = "#ff3b3b";
+    ctx.fillRect(6,-3,4,6);
+    ctx.fillStyle = "#8a8f99";
+    ctx.beginPath(); ctx.moveTo(-9,-3); ctx.lineTo(-15,0); ctx.lineTo(-9,3); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawPlayerSpeech(){
@@ -1693,14 +1873,16 @@ function hideGameplayUI(){
 }
 
 function resetWorld(){
-  buildings = []; obstacles = []; particles = []; landmarks = []; hazards = [];
+  buildings = []; obstacles = []; particles = []; landmarks = []; hazards = []; missiles = [];
   spawnDronesIfNeeded._nextX = 0;
   buildingsUntilPhoto = pick([7,8]);
+  Weather.raining = false; Weather.timer = 0; Weather.nextCheckX = RAIN_CHECK_INTERVAL_WORLD;
   Game.score = 0; Game.hearts = Game.maxHearts; Game.elapsed = 0; Game.invulnT = 1.0; Game.ended = false;
   Player.x = 100; Player.y = WORLD_BASE_Y - H*0.55; Player.vx = 120; Player.vy = 0;
   Player.mode = "fall"; Player.anchor = null;
   Game.camX = Player.x - VW*0.34;
   Game.camY = Player.y - VH*0.5;
+  updateDayNight();
   generateJourney();
   genBuildingsUpTo(Game.camX + VW + 400);
   genLandmarksUpTo(Game.camX + VW + 400);
@@ -1709,6 +1891,7 @@ function resetWorld(){
 function startGame(){
   resize();
   seedStars();
+  seedRain();
   resetWorld();
   Game.running = true; Game.over = false; Game.ended = false;
   showGameplayUI();
@@ -1782,6 +1965,7 @@ function reviveInstantly(){
     localStorage.removeItem(STORAGE_KEY_PENDING_SETTINGS);
     resize();
     if(!stars.length) seedStars();
+    if(!raindrops.length) seedRain();
     resetWorld();
   } else {
     Game.hearts = Game.maxHearts;
